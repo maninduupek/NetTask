@@ -10,6 +10,8 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import javax.swing.BorderFactory;
@@ -32,11 +34,12 @@ import javax.swing.SwingWorker;
 
 public class ChatUI extends JFrame {
 
-    /**
-	 * 
-	 */
-	private static final long serialVersionUID = 1L;
-	private JTextArea chatArea;
+    private static final long serialVersionUID = 1L;
+
+    private static final DateTimeFormatter TIME_FORMAT =
+            DateTimeFormatter.ofPattern("HH:mm:ss");
+
+    private JTextArea chatArea;
     private JTextField messageField;
 
     private JButton sendButton;
@@ -56,6 +59,7 @@ public class ChatUI extends JFrame {
     private String username;
 
     private volatile boolean running = true;
+    private volatile boolean connectionAvailable = true;
 
     public ChatUI(String username, MessageHandler messageHandler) {
 
@@ -70,19 +74,14 @@ public class ChatUI extends JFrame {
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-        // Handle the window X button
         addWindowListener(new WindowAdapter() {
-
             @Override
             public void windowClosing(WindowEvent e) {
-
                 closeChatWindow();
-
             }
         });
 
         createInterface();
-
         startMessageListener();
     }
 
@@ -94,7 +93,6 @@ public class ChatUI extends JFrame {
                 BorderFactory.createEmptyBorder(15, 15, 15, 15)
         );
 
-        // Header
         JLabel titleLabel = new JLabel(
                 "NetTask - Multi Client Chat",
                 SwingConstants.CENTER
@@ -154,10 +152,7 @@ public class ChatUI extends JFrame {
         onlineLabel.setFont(new Font("Arial", Font.BOLD, 14));
 
         usersPanel.add(onlineLabel, BorderLayout.NORTH);
-        usersPanel.add(
-                new JScrollPane(userList),
-                BorderLayout.CENTER
-        );
+        usersPanel.add(new JScrollPane(userList), BorderLayout.CENTER);
 
         JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
         centerPanel.setBackground(new Color(25, 25, 35));
@@ -174,7 +169,6 @@ public class ChatUI extends JFrame {
         sendButton = createButton("Send");
 
         sendButton.addActionListener(_ -> sendMessage());
-
         messageField.addActionListener(_ -> sendMessage());
 
         JPanel messagePanel = new JPanel(new BorderLayout(5, 5));
@@ -252,7 +246,8 @@ public class ChatUI extends JFrame {
             return;
         }
 
-        if (messageHandler != null
+        if (connectionAvailable
+                && messageHandler != null
                 && messageHandler.isConnected()) {
 
             messageHandler.sendMessage(message);
@@ -260,7 +255,8 @@ public class ChatUI extends JFrame {
 
         } else {
 
-            appendMessage("Not connected to server.");
+            appendMessage("SERVER: Not connected to server.");
+            handleConnectionLost();
         }
     }
 
@@ -269,22 +265,20 @@ public class ChatUI extends JFrame {
 
         Thread listenerThread = new Thread(() -> {
 
-            while (running) {
+            while (running && connectionAvailable) {
 
                 try {
 
-                    String message =
-                            messageHandler.receiveMessage();
+                    String message = messageHandler.receiveMessage();
 
                     if (message == null) {
+                        handleConnectionLost();
                         break;
                     }
 
                     if (message.startsWith("USERS:")) {
 
-                        String users =
-                                message.substring(6);
-
+                        String users = message.substring(6);
                         updateUserList(users);
 
                     } else {
@@ -295,9 +289,7 @@ public class ChatUI extends JFrame {
                 } catch (IOException e) {
 
                     if (running) {
-                        appendMessage(
-                                "Connection lost: " + e.getMessage()
-                        );
+                        handleConnectionLost();
                     }
 
                     break;
@@ -309,6 +301,33 @@ public class ChatUI extends JFrame {
         listenerThread.setName("NetTask-MessageListener");
         listenerThread.setDaemon(true);
         listenerThread.start();
+    }
+
+    // Handle connection loss
+    private void handleConnectionLost() {
+
+        if (!connectionAvailable) {
+            return;
+        }
+
+        connectionAvailable = false;
+
+        SwingUtilities.invokeLater(() -> {
+
+            if (messageField != null) {
+                messageField.setEnabled(false);
+            }
+
+            if (sendButton != null) {
+                sendButton.setEnabled(false);
+            }
+
+            if (transferStatusLabel != null) {
+                transferStatusLabel.setText("Server connection lost.");
+            }
+
+            appendMessage("SERVER: Connection lost. Please reconnect.");
+        });
     }
 
     // Update online users
@@ -333,14 +352,27 @@ public class ChatUI extends JFrame {
         });
     }
 
-    // Display message
+    // Display messages with timestamps
     private void appendMessage(String message) {
 
         SwingUtilities.invokeLater(() -> {
 
             if (chatArea != null) {
 
-                chatArea.append(message + "\n");
+                String time = LocalTime.now().format(TIME_FORMAT);
+                String displayMessage;
+
+                if (message.startsWith("SERVER:")) {
+
+                    displayMessage = "[" + time + "] [SERVER] "
+                            + message.substring(7).trim();
+
+                } else {
+
+                    displayMessage = "[" + time + "] " + message;
+                }
+
+                chatArea.append(displayMessage + "\n");
 
                 chatArea.setCaretPosition(
                         chatArea.getDocument().getLength()
@@ -365,8 +397,7 @@ public class ChatUI extends JFrame {
         setTransferButtonsEnabled(false);
         startTransfer("Uploading " + selectedFile.getName());
 
-        SwingWorker<Void, Integer> worker =
-                new SwingWorker<>() {
+        SwingWorker<Void, Integer> worker = new SwingWorker<>() {
 
             @Override
             protected Void doInBackground() throws Exception {
@@ -382,9 +413,7 @@ public class ChatUI extends JFrame {
             @Override
             protected void process(List<Integer> chunks) {
 
-                int progress =
-                        chunks.get(chunks.size() - 1);
-
+                int progress = chunks.get(chunks.size() - 1);
                 updateTransferProgress(progress);
             }
 
@@ -395,9 +424,7 @@ public class ChatUI extends JFrame {
 
                     get();
 
-                    finishTransfer(
-                            "Upload completed successfully!"
-                    );
+                    finishTransfer("Upload completed successfully!");
 
                     appendMessage(
                             "File uploaded: " + selectedFile.getName()
@@ -407,10 +434,7 @@ public class ChatUI extends JFrame {
 
                     finishTransfer("Upload failed.");
 
-                    showError(
-                            "Upload Error",
-                            getErrorMessage(e)
-                    );
+                    showError("Upload Error", getErrorMessage(e));
                 }
 
                 setTransferButtonsEnabled(true);
@@ -441,12 +465,10 @@ public class ChatUI extends JFrame {
         setTransferButtonsEnabled(false);
         startTransfer("Loading shared files...");
 
-        SwingWorker<List<String>, Void> worker =
-                new SwingWorker<>() {
+        SwingWorker<List<String>, Void> worker = new SwingWorker<>() {
 
             @Override
-            protected List<String> doInBackground()
-                    throws Exception {
+            protected List<String> doInBackground() throws Exception {
 
                 return fileTransferHandler.getSharedFiles();
             }
@@ -470,8 +492,7 @@ public class ChatUI extends JFrame {
                         return;
                     }
 
-                    String[] fileArray =
-                            files.toArray(new String[0]);
+                    String[] fileArray = files.toArray(new String[0]);
 
                     String selectedFile =
                             (String) JOptionPane.showInputDialog(
@@ -486,11 +507,10 @@ public class ChatUI extends JFrame {
 
                     if (selectedFile != null) {
 
-                        String fileName =
-                                selectedFile.replaceFirst(
-                                    " \\([0-9]+(?:\\.[0-9]+)? (?:B|KB|MB)\\)$",
-                                    ""
-                                );
+                        String fileName = selectedFile.replaceFirst(
+                                " \\([0-9]+(?:\\.[0-9]+)? (?:B|KB|MB)\\)$",
+                                ""
+                        );
 
                         downloadSelectedFile(fileName);
                     }
@@ -518,7 +538,6 @@ public class ChatUI extends JFrame {
     private void downloadSelectedFile(String fileName) {
 
         JFileChooser chooser = new JFileChooser();
-
         chooser.setSelectedFile(new File(fileName));
 
         int result = chooser.showSaveDialog(this);
@@ -532,8 +551,7 @@ public class ChatUI extends JFrame {
         setTransferButtonsEnabled(false);
         startTransfer("Downloading " + fileName);
 
-        SwingWorker<Void, Integer> worker =
-                new SwingWorker<>() {
+        SwingWorker<Void, Integer> worker = new SwingWorker<>() {
 
             @Override
             protected Void doInBackground() throws Exception {
@@ -550,9 +568,7 @@ public class ChatUI extends JFrame {
             @Override
             protected void process(List<Integer> chunks) {
 
-                int progress =
-                        chunks.get(chunks.size() - 1);
-
+                int progress = chunks.get(chunks.size() - 1);
                 updateTransferProgress(progress);
             }
 
@@ -563,13 +579,9 @@ public class ChatUI extends JFrame {
 
                     get();
 
-                    finishTransfer(
-                            "Download completed successfully!"
-                    );
+                    finishTransfer("Download completed successfully!");
 
-                    appendMessage(
-                            "File downloaded: " + fileName
-                    );
+                    appendMessage("File downloaded: " + fileName);
 
                     JOptionPane.showMessageDialog(
                             ChatUI.this,
@@ -581,10 +593,7 @@ public class ChatUI extends JFrame {
 
                     finishTransfer("Download failed.");
 
-                    showError(
-                            "Download Error",
-                            getErrorMessage(e)
-                    );
+                    showError("Download Error", getErrorMessage(e));
 
                 } finally {
 
@@ -663,12 +672,10 @@ public class ChatUI extends JFrame {
 
         running = false;
 
-        // Disconnect from server
         if (messageHandler != null) {
             messageHandler.disconnect();
         }
 
-        // Close this window
         dispose();
     }
 }
