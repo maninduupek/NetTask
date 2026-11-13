@@ -1,4 +1,3 @@
-
 package nettask.server;
 
 import java.io.PrintWriter;
@@ -42,7 +41,7 @@ public class ClientManager {
     }
 
     // Remove a disconnected client
-    public synchronized void removeClient(Socket socket) {
+    public synchronized String removeClient(Socket socket) {
 
         String username = connectedClients.remove(socket);
         clientWriters.remove(socket);
@@ -53,6 +52,8 @@ public class ClientManager {
 
         System.out.println("Total connected clients: "
                 + getConnectedClientCount());
+
+        return username;
     }
 
     // Get connected client count

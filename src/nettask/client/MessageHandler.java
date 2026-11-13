@@ -1,4 +1,3 @@
-
 package nettask.client;
 
 import java.io.BufferedReader;
@@ -101,4 +100,20 @@ public class MessageHandler {
                 && socket.isConnected()
                 && !socket.isClosed();
     }
+
+    // Get connected server information for file transfer calls
+    public String getServerAddress() {
+        if (socket == null) {
+            return "localhost";
+        }
+
+        return socket.getInetAddress() != null
+                ? socket.getInetAddress().getHostAddress()
+                : "localhost";
+    }
+
+    public int getServerPort() {
+        return socket != null && !socket.isClosed() ? 6060 : 6060;
+    }
+
 }

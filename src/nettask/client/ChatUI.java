@@ -1,4 +1,3 @@
-
 package nettask.client;
 
 import java.awt.BorderLayout;
@@ -65,7 +64,10 @@ public class ChatUI extends JFrame {
 
         this.username = username;
         this.messageHandler = messageHandler;
-        this.fileTransferHandler = new FileTransferHandler();
+        this.fileTransferHandler = new FileTransferHandler(
+                messageHandler != null ? messageHandler.getServerAddress() : "localhost",
+                6061
+        );
 
         setTitle("NetTask - " + username);
         setSize(950, 650);
@@ -243,6 +245,13 @@ public class ChatUI extends JFrame {
         String message = messageField.getText().trim();
 
         if (message.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Message cannot be empty.",
+                    "Empty Message",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            messageField.requestFocusInWindow();
             return;
         }
 
@@ -258,6 +267,7 @@ public class ChatUI extends JFrame {
             appendMessage("SERVER: Not connected to server.");
             handleConnectionLost();
         }
+
     }
 
     // Receive messages from server
@@ -384,6 +394,11 @@ public class ChatUI extends JFrame {
     // Upload file
     private void uploadFile() {
 
+        if (messageHandler == null || !messageHandler.isConnected()) {
+            showError("Connection Error", "Not connected to the server.");
+            return;
+        }
+
         JFileChooser chooser = new JFileChooser();
 
         int result = chooser.showOpenDialog(this);
@@ -393,6 +408,11 @@ public class ChatUI extends JFrame {
         }
 
         File selectedFile = chooser.getSelectedFile();
+
+        if (selectedFile == null || !selectedFile.isFile()) {
+            showError("Upload Error", "Please choose a valid file.");
+            return;
+        }
 
         setTransferButtonsEnabled(false);
         startTransfer("Uploading " + selectedFile.getName());
@@ -447,6 +467,11 @@ public class ChatUI extends JFrame {
     // Download file manually
     private void downloadFile() {
 
+        if (messageHandler == null || !messageHandler.isConnected()) {
+            showError("Connection Error", "Not connected to the server.");
+            return;
+        }
+
         String fileName = JOptionPane.showInputDialog(
                 this,
                 "Enter the exact file name to download:"
@@ -461,6 +486,11 @@ public class ChatUI extends JFrame {
 
     // Display shared files
     private void showSharedFiles() {
+
+        if (messageHandler == null || !messageHandler.isConnected()) {
+            showError("Connection Error", "Not connected to the server.");
+            return;
+        }
 
         setTransferButtonsEnabled(false);
         startTransfer("Loading shared files...");
@@ -537,6 +567,11 @@ public class ChatUI extends JFrame {
     // Download selected file
     private void downloadSelectedFile(String fileName) {
 
+        if (fileName == null || fileName.trim().isEmpty()) {
+            showError("Download Error", "Please enter a valid file name.");
+            return;
+        }
+
         JFileChooser chooser = new JFileChooser();
         chooser.setSelectedFile(new File(fileName));
 
@@ -547,6 +582,14 @@ public class ChatUI extends JFrame {
         }
 
         File destination = chooser.getSelectedFile();
+
+        if (destination.exists()) {
+            showError(
+                    "Download Error",
+                    "A file with this name already exists. Choose a different location."
+            );
+            return;
+        }
 
         setTransferButtonsEnabled(false);
         startTransfer("Downloading " + fileName);

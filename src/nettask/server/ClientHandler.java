@@ -1,4 +1,3 @@
-
 package nettask.server;
 
 import java.io.BufferedReader;
@@ -84,14 +83,13 @@ public class ClientHandler implements Runnable {
 
             if (registered) {
 
-                // Remove disconnected client
-                clientManager.removeClient(socket);
+                String disconnectedUser = clientManager.removeClient(socket);
 
-                // Notify remaining clients
-                clientManager.broadcastMessage(
-                        "SERVER: " + "A client has disconnected.");
+                if (disconnectedUser != null && !disconnectedUser.isBlank()) {
+                    clientManager.broadcastMessage(
+                            "SERVER: " + disconnectedUser + " disconnected.");
+                }
 
-                // Update online users list
                 clientManager.broadcastUserList();
             }
 
