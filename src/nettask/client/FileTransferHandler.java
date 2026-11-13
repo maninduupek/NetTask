@@ -1,4 +1,3 @@
-
 package nettask.client;
 
 import java.io.DataInputStream;
@@ -8,15 +7,44 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
 
 public class FileTransferHandler {
 
-    private static final String SERVER_IP = "localhost";
-    private static final int SERVER_PORT = 6061;
+    private static final int DEFAULT_SERVER_PORT = 6061;
     private static final long MAX_FILE_SIZE = 100 * 1024L * 1024L;
+
+    private final String serverIp;
+    private final int serverPort;
+
+    public FileTransferHandler() {
+        this("localhost", DEFAULT_SERVER_PORT);
+    }
+
+    public FileTransferHandler(String serverIp) {
+        this(serverIp, DEFAULT_SERVER_PORT);
+    }
+
+    public FileTransferHandler(String serverIp, int serverPort) {
+        if (serverIp == null || serverIp.trim().isEmpty()) {
+            this.serverIp = "localhost";
+        } else {
+            this.serverIp = serverIp.trim();
+        }
+
+        if (serverPort < 1 || serverPort > 65535) {
+            throw new IllegalArgumentException(
+                    "Invalid file transfer server port: " + serverPort);
+        }
+
+        this.serverPort = serverPort;
+    }
 
     // Upload without progress callback (backward compatibility)
     public String uploadFile(File file) throws IOException {
@@ -42,7 +70,7 @@ public class FileTransferHandler {
         }
 
         try (
-            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+            Socket socket = new Socket(serverIp, serverPort);
             DataOutputStream out = new DataOutputStream(
                     socket.getOutputStream());
             DataInputStream in = new DataInputStream(
@@ -116,8 +144,13 @@ public class FileTransferHandler {
             throw new IOException("Download folder does not exist.");
         }
 
+        if (destination.exists()) {
+            throw new IOException(
+                    "A file with this name already exists. Choose a different destination.");
+        }
+
         try (
-            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+            Socket socket = new Socket(serverIp, serverPort);
             DataOutputStream out = new DataOutputStream(
                     socket.getOutputStream());
             DataInputStream in = new DataInputStream(
@@ -140,9 +173,13 @@ public class FileTransferHandler {
                 throw new IOException("Invalid file size.");
             }
 
-            try (FileOutputStream fileOut =
-                    new FileOutputStream(destination)) {
+            Path destinationPath = destination.toPath().toAbsolutePath().normalize();
+            Path tempPath = Files.createTempFile(
+                    destinationPath.getParent(),
+                    "nettask-download-",
+                    ".tmp");
 
+            try (FileOutputStream fileOut = new FileOutputStream(tempPath.toFile())) {
                 byte[] buffer = new byte[8192];
                 long remaining = fileSize;
                 long totalReceived = 0;
@@ -174,6 +211,21 @@ public class FileTransferHandler {
                 }
             }
 
+            try {
+                Files.move(
+                        tempPath,
+                        destinationPath,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                );
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(
+                        tempPath,
+                        destinationPath,
+                        StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+
             reportProgress(progress, 100);
 
             return "File downloaded successfully: "
@@ -196,7 +248,7 @@ public class FileTransferHandler {
         List<String> sharedFiles = new ArrayList<>();
 
         try (
-            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+            Socket socket = new Socket(serverIp, serverPort);
             DataOutputStream out = new DataOutputStream(
                     socket.getOutputStream());
             DataInputStream in = new DataInputStream(

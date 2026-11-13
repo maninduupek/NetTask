@@ -1,24 +1,40 @@
-# Compiled class file
+# Compiled Java files
 *.class
 
-# Log file
+# Log files
 *.log
 
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+# Java packages
 *.jar
 *.war
 *.nar
 *.ear
-*.zip
-*.tar.gz
-*.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Temporary files
+*.tmp
+*.part
+
+# JVM crash logs
 hs_err_pid*
 replay_pid*
+
+# Eclipse workspace
+.metadata/
+.loadpath
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Build output
+bin/
+out/
+target/
+
+# Runtime uploaded files
+/shared_files/*
+!/shared_files/.gitkeep
+
+# Temporary test files
+large_test_file.bin
+empty_test.txt
